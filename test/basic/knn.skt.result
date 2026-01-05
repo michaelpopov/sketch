@@ -1,0 +1,15 @@
+Successfully created catalog 'cat'
+
+Successfully created dataset 'ds'
+
+Generated 12 test data items in /tmp/sketch/basic/knn.skt//gen.input
+
+Using dataset cat.ds
+
+Loaded 12 / 12 items into dataset
+ - added: 12
+ - removed: 0
+ - updated: 0
+
+3, 7, 4, 6, 
+

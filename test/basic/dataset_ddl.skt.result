@@ -1,0 +1,26 @@
+Successfully created catalog 'one'
+
+
+Successfully created dataset 'aaa'
+
+aaa
+
+Type: f16
+Dim: 256
+Nodes: 8
+
+Dataset 'aaa' already exists in catalog 'one'
+
+Successfully created dataset 'bbb'
+
+aaa
+bbb
+
+Type: f32
+Dim: 256
+Nodes: 8
+
+Successfully dropped dataset 'aaa'
+
+bbb
+

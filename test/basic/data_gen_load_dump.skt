@@ -1,0 +1,7 @@
+CREATE CATALOG cat;
+CREATE DATASET cat.ds TYPE=f32 DIM=4 COUNT=2;
+GENERATE $DIR/gen.input 12 4;
+USE cat.ds;
+LOAD $DIR/gen.input;
+DUMP;
+
