@@ -11,8 +11,7 @@ NO_REMOVE="$2"
 OUTPUT=$TEST.out
 RESULT=$TEST.result
 
-#$PROJECT_HOME/bin-dbg/tester -e $TEST -ns -c config.ini < $TEST > $OUTPUT
-$PROJECT_HOME/bin-dbg/tester -e $TEST -s -c config.ini < $TEST > $OUTPUT
+$PROJECT_HOME/bin-dbg/tester -e $TEST -ns -c config.ini < $TEST > $OUTPUT
 
 DIFF_COUNT=`diff $OUTPUT $RESULT | wc -l`
 

@@ -44,7 +44,7 @@ Ret Engine::init() {
    
     try {
         if (!std::filesystem::exists(data_path)) {
-            if (std::filesystem::create_directory(data_path) != 0) {
+            if (std::filesystem::create_directories(data_path) != 0) {
                 return make_error(std::format("Failed to create data directory '{}'", data_path.string()));
             }
         }

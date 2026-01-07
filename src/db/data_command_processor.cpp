@@ -130,7 +130,7 @@ Ret DataCommandProcessor::process_generate_cmd(Commands& commands, bool is_help)
         }
     }
 
-    int ret = InputDataGenerator::generate(path, dim, count, start);
+    auto ret = InputDataGenerator::generate(path, dim, count, start);
     if (ret != 0) {
         return "Failed to generate test data in dataset";
     }
@@ -150,7 +150,7 @@ Ret DataCommandProcessor::process_load_cmd(Commands& commands, bool is_help) {
     const auto& input_path = commands[1];
 
     LoadReport report;
-    int ret = current_dataset_->load(input_path, report, engine_.thread_pool());
+    auto ret = current_dataset_->load(input_path, report, engine_.thread_pool());
     if (ret != 0) {
         return ret;
     }
@@ -224,7 +224,7 @@ Ret DataCommandProcessor::process_find_cmd(Commands& commands, bool is_help) {
 
         uint64_t _;
         std::vector<uint8_t> data;
-        int ret = input_data->get(index, current_dataset_->metadata(), _, data);
+        auto ret = input_data->get(index, current_dataset_->metadata(), _, data);
         if (ret != 0) {
             return "Failed to parse get test data.";
         }
@@ -274,7 +274,7 @@ Ret DataCommandProcessor::process_knn_cmd(Commands& commands, bool is_help) {
 
     uint64_t tag;
     std::vector<uint8_t> data;
-    int ret = input_data->get(index, current_dataset_->metadata(), tag, data);
+    auto ret = input_data->get(index, current_dataset_->metadata(), tag, data);
     if (ret != 0) {
         return "Failed to parse get test data.";
     }
@@ -344,7 +344,7 @@ Ret DataCommandProcessor::process_kmeanspp_cmd(Commands& commands, bool is_help)
 
     const auto& md = current_dataset_->metadata();
     IvfBuilder builder(md.type, md.dim, centroids_count, sample_size);
-    int ret = builder.init();
+    auto ret = builder.init();
     if (ret != 0) {
         return ret;
     }
@@ -403,7 +403,7 @@ Ret DataCommandProcessor::process_make_centroids_cmd(Commands& commands, bool is
 
     const auto& md = current_dataset_->metadata();
     IvfBuilder builder(md.type, md.dim, centroids_count, sample_size);
-    int ret = builder.init();
+    auto ret = builder.init();
     if (ret != 0) {
         return ret;
     }
@@ -464,7 +464,7 @@ Ret DataCommandProcessor::process_make_ivf_cmd(Commands& commands, bool is_help)
 
     const auto& md = current_dataset_->metadata();
     IvfBuilder builder(md.type, md.dim, centroids_count, sample_size);
-    int ret = builder.init();
+    auto ret = builder.init();
     if (ret != 0) {
         return ret;
     }
@@ -524,7 +524,7 @@ Ret DataCommandProcessor::process_ann_cmd(Commands& commands, bool is_help) {
 
     uint64_t tag;
     std::vector<uint8_t> data;
-    int ret = input_data->get(index, current_dataset_->metadata(), tag, data);
+    auto ret = input_data->get(index, current_dataset_->metadata(), tag, data);
     if (ret != 0) {
         return "Failed to parse get test data.";
     }

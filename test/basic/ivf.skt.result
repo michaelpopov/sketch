@@ -1,0 +1,17 @@
+Successfully created catalog 'cat'
+
+Successfully created dataset 'ds'
+
+Generated 100000 test data items in /tmp/sketch/basic/ivf.skt//gen.input
+
+Using dataset cat.ds
+
+Loaded 100000 / 100000 items into dataset
+ - added: 100000
+ - removed: 0
+ - updated: 0
+
+Output turned off for command [ MAKE_IVF 10 10000 16;]
+0
+996, 997, 998, 999, 1001, 1002, 1003, 1004, 
+

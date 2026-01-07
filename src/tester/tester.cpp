@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 
 namespace sketch {
 
-bool interactive = false;
+bool interactive;
 
 void do_work(const std::string& data_dir) {
     char buffer[256] = { '\0' };
@@ -77,6 +77,7 @@ void do_work(const std::string& data_dir) {
     interactive = args.interactive;
 
     for (;;) {
+        bool no_output = false;
         char* line = nullptr;
 
         if (interactive) {
@@ -123,6 +124,12 @@ void do_work(const std::string& data_dir) {
             continue;
         }
 
+        if (len > 0 && line[0] == '-') {
+            line++;
+            no_output = true;
+            std::cout << "Output turned off for command [" << line << "]" << std::endl;
+        }
+
         cmd += trim_inplace(line);
         if (cmd.back() == ';') {
             mid_cmd = false;
@@ -153,10 +160,17 @@ void do_work(const std::string& data_dir) {
         Ret ret = router.process_command(commands);
 
         bool print_message = interactive || ret.is_content() || args.show;
-        if (!print_message) {
+        if (!print_message || no_output) {
             std::cout << ret.code() << std::endl;
         } else {
-            std::cout << ret.message() << std::endl;
+            if (ret.message().empty()) {
+                if (ret.code() == 0)
+                    std::cout << "OK" << std::endl << std::endl;
+                else
+                    std::cout << "ERROR: " << ret.code() << std::endl << std::endl;
+            } else {
+                std::cout << ret.message() << std::endl;
+            }
 
             bool extra_newline = !ret.message().empty() && ret.message().back() != '\n';
             if (extra_newline) {

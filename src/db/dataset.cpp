@@ -221,6 +221,7 @@ Ret Dataset::load(const std::string_view& input_path, LoadReport& report, Thread
     }
     report.input_count = input_data.count();
 
+    Ret result{0};
     if (thread_pool) {
         std::vector<std::future<Ret>> futures;
         futures.reserve(nodes_.size());
@@ -243,7 +244,7 @@ Ret Dataset::load(const std::string_view& input_path, LoadReport& report, Thread
         for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
             Ret ret = futures[node_index].get();
             if (ret != 0) {
-                return std::format("Failed to prepare load for node {}: {}", node_index, ret.message());
+                result = Ret(-1, std::format("Failed to prepare load for node {}: {}", node_index, ret.message()));
             }
         }
 
@@ -267,7 +268,7 @@ Ret Dataset::load(const std::string_view& input_path, LoadReport& report, Thread
         for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
             Ret ret = futures[node_index].get();
             if (ret != 0) {
-                return std::format("Failed to load for node {}: {}", node_index, ret.message());
+                result = Ret(-1, std::format("Failed to load for node {}: {}", node_index, ret.message()));
             }
         }
     } else {
@@ -289,7 +290,7 @@ Ret Dataset::load(const std::string_view& input_path, LoadReport& report, Thread
         }
     }
 
-    return 0;
+    return result;
 }
 
 Ret Dataset::dump(const std::string_view& output_path, ThreadPool* thread_pool) {
@@ -490,11 +491,18 @@ Ret Dataset::knn(KnnType type, uint64_t count, const std::vector<uint8_t>& data,
         }
     }
 
-    std::stringstream sstream;
+    std::vector<uint64_t> tags;
     while (!pq.empty()) {
         const auto item = pq.top();
-        sstream << item.tag << ", ";
+        tags.push_back(item.tag);
         pq.pop();
+    }
+
+    std::sort( tags.begin(), tags.end());
+
+    std::stringstream sstream;
+    for (auto tag : tags) {
+        sstream << tag << ", ";
     }
 
     return Ret(0, sstream.str());
@@ -760,11 +768,18 @@ Ret Dataset::ann(uint64_t count, uint64_t nprobes, const std::vector<uint8_t>& d
         }
     }
 
-    std::stringstream sstream;
+    std::vector<uint64_t> tags;
     while (!pq.empty()) {
         const auto item = pq.top();
-        sstream << item.tag << ", ";
+        tags.push_back(item.tag);
         pq.pop();
+    }
+
+    std::sort( tags.begin(), tags.end());
+
+    std::stringstream sstream;
+    for (auto tag : tags) {
+        sstream << tag << ", ";
     }
 
     return Ret(0, sstream.str());
