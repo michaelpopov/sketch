@@ -108,7 +108,7 @@ Ret DDLCommandProcessor::process_create_cmd(Commands& commands, bool is_help) {
             properties_count++;
             PARAM_CONV(cmd.dim, prop_iter->second);
         }
-        prop_iter = properties.find("COUNT");
+        prop_iter = properties.find("NODES");
         if (prop_iter != properties.end()) {
             properties_count++;
             PARAM_CONV(cmd.nodes_count, prop_iter->second);

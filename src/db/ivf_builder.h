@@ -24,7 +24,8 @@ public:
     const uint8_t* get_record(size_t index) const { return records_[index]; }
     uint32_t* get_counts() { return reinterpret_cast<uint32_t*>(ptr_); }
 
-    void set_record(size_t index, uint8_t* record_ptr) {
+    using RecordPtr = const uint8_t*;
+    void set_record(size_t index, RecordPtr record_ptr) {
         if (index < records_count_) {
             records_[index] = record_ptr;
         }
@@ -49,7 +50,7 @@ private:
     SetType current_set_type_ = SetType::First;
 
     uint32_t* counts_ = nullptr;
-    uint8_t** records_ = nullptr;
+    RecordPtr* records_ = nullptr;
     double* sums_ = nullptr;
     uint8_t* centroids_ = nullptr;
 

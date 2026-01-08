@@ -45,7 +45,7 @@ Ret IvfBuilder::init() {
     sums_size_ = centroids_count_ * dim_ * sizeof(double);
 
     counts_ = reinterpret_cast<uint32_t*>(ptr_);
-    records_ = reinterpret_cast<uint8_t**>(ptr_ + counts_size_);
+    records_ = reinterpret_cast<RecordPtr*>(ptr_ + counts_size_);
     sums_ = reinterpret_cast<double*>(ptr_ + counts_size_ + records_size_);
     centroids_ = ptr_ + counts_size_ + records_size_ + sums_size_;
     centroids_size_ = centroids_count_ * vector_size_;
@@ -118,7 +118,7 @@ Ret IvfBuilder::init_centroids_kmeans_plus_plus() {
 
         // 2. Compute D(x)^2 for all points
         for (size_t j = 0; j < records_count_; j++) {
-            uint8_t* p = records_[j];
+            RecordPtr p = records_[j];
             if (p == nullptr) {
                 continue;
             }
@@ -212,8 +212,8 @@ Ret IvfBuilder::internal_recalc_centroids() {
 
         double* sums = sums_ + best_centroid_index * dim_;
         switch (type_) {
-            case DatasetType::f32: apply_sum(reinterpret_cast<float*>(record), sums, dim_); break;
-            case DatasetType::f16: apply_sum(reinterpret_cast<float16_t*>(record), sums, dim_); break;
+            case DatasetType::f32: apply_sum(reinterpret_cast<const float*>(record), sums, dim_); break;
+            case DatasetType::f16: apply_sum(reinterpret_cast<const float16_t*>(record), sums, dim_); break;
         }
         counts[best_centroid_index]++;   
     }

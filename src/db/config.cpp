@@ -60,6 +60,12 @@ int parse_config(const std::string& cfg_file, Config& cfg) {
             } else {
                 LOG_ERROR << "Unknown config key in [data]: " << key;
             }
+        } else if (strcmp(section, "threading") == 0) {
+            if (strcmp(key, "thread_pool_size") == 0) {
+                cfg.thread_pool_size = static_cast<size_t>(std::strtoul(val, nullptr, 10));
+            } else {
+                LOG_ERROR << "Unknown config key in [threading]: " << key;
+            }
         } else {
             LOG_ERROR << "Unknown config section: " << section;
             return -1;

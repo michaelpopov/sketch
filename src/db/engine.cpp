@@ -63,6 +63,10 @@ Ret Engine::init() {
         return make_error(std::format("Filesystem error while initializing engine: {}", e.what()));
     }
 
+    if (config_.thread_pool_size > 0) {
+        start_tread_pool(config_.thread_pool_size);
+    }
+
     return 0;
 }
 

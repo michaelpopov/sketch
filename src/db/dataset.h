@@ -39,6 +39,8 @@ public:
     Ret ann(uint64_t count, uint64_t nprobes, const std::vector<uint8_t>& data, uint64_t skip_tag, ThreadPool* thread_pool = nullptr);
     Ret gc();
     Ret show_ivf();
+    Ret make_residual(uint64_t count, ThreadPool* thread_pool = nullptr);
+    Ret make_pq_centroids(uint64_t count, ThreadPool* thread_pool = nullptr);
 
 private:
     struct InUseMarker {
@@ -56,6 +58,7 @@ private:
     std::atomic<uint64_t> in_use_count_{0};
     std::atomic<bool> shutting_down_{false};
     std::unique_ptr<Centroids> centroids_;
+    std::vector<std::unique_ptr<Centroids>> pq_centroids_;
     RWLock rw_lock_;
 
 private:
@@ -66,6 +69,7 @@ private:
     Ret write_centroids(IvfBuilder& builder);
     Ret write_index_internal(ThreadPool* thread_pool = nullptr);
     Ret update_and_write_metadata();
+    Ret load_pq_centroids();
 
 };
 using DatasetPtr = std::shared_ptr<Dataset>;
@@ -88,5 +92,16 @@ private:
     std::unique_ptr<ReadGuard> guard_;
     std::unique_ptr<Dataset::InUseMarker> marker_;
 };
+
+#define READ_OP_HEADER \
+    if (shutting_down_) return -1; \
+    const InUseMarker in_use_marker(in_use_count_); \
+    const ReadGuard guard(rw_lock_);
+
+#define WRITE_OP_HEADER \
+    if (shutting_down_) return -1; \
+    const InUseMarker in_use_marker(in_use_count_); \
+    const WriteGuard guard(rw_lock_);
+
 
 } // namespace sketch

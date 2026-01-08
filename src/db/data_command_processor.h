@@ -42,6 +42,8 @@ private:
     Ret process_show_ivf_cmd(Commands& commands, bool is_help);
     Ret process_ann_cmd(Commands& commands, bool is_help);
     Ret process_gc_cmd(Commands& commands, bool is_help);
+    Ret process_make_residual_cmd(Commands& commands, bool is_help);
+    Ret process_make_pq_centroids_cmd(Commands& commands, bool is_help);
 };
 
 } // namespace sketch

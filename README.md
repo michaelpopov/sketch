@@ -1,48 +1,82 @@
-# sketch
-Personal research project to build a sketch of a vector storage engine.
+# Sketch
 
-# Code Status
-It's a research project. Something that can be thrown away when main technical questions are answered and a clarity about the system design is achieved. Thus, the code quality is not on a production level. It is a continuous "work in progress" intended to experiment with technical ideas, learn new things and find good/acceptable answers to technical questions.
+**Sketch** is a personal research project exploring the design of a vector storage engine. The goal is to prototype ideas, validate assumptions, and experiment with alternative design choices in a controlled, greenfield environment.
 
-# Reasons for development
-I participated in development of a few vector databases. These systems are running in production so there were reasonable constraints on design decisions. I wanted to experiment with a "green field" development and to figure out the "ideal" design (in my opinion, of course) that delivers the best performance on the least resource usage.
+## Code Status
 
-# Main Design Decisions
-## Specialized Storage Engine
-I've seen systems storing vector data in the existing storage engines: B-tree based and LSM tree based. There were good reasons to use this approach but it incurs high cost of resource usage and adds significant inefficiencies. Storing 6K vectors in 16K B-tree pages causes to 25% unncessary I/O transfers. Storing 6K vectors in LSM-tree memtables and sorting them out in SSTable looks like very heavy lifting. It is obvious that such systems can work in production but the issue with efficiency remains.
+This is a research and experimentation project. The code is not intended for production use and can be discarded once the main technical questions are answered and the overall system design becomes clearer.
 
-There are special properties to vector's data. It's a fixed size record data. It should be possible to define a storage that utilizes this constraint and achives better efficiency. It is also more like OLAP kind of data, which can be loaded to the storage as a batch, thus applying transactional mechanisms like WAL to this data seems unnecessary. In many use-case scenarios there is a sequential access to the data, so optimizing for scanning record after record looks like a good idea.
+Code quality reflects its purpose: it is a continuous work in progress aimed at testing ideas, learning, and exploring trade-offs rather than delivering a polished or stable system.
 
-Thus, this sketch presents implemenation of these ideas. It's a storage engine that saves vectors sequentially in data files. This should provide efficient data acccess for sequential scans of data. It also includes indexes to allow direct access to records.
+## Motivation
 
-## Out of Process Storage Engine
-Noramlly storage engines are implemented as libraries, which are linked into a database executable and run in the same process. I decided to experiment with "out of process" storage engine: the storage engine is running as a standalone process and adding an adapter library integrated into a database executable that provides access to this storage engine.
+I have participated in the development of several vector databases that run in production environments. Naturally, those systems were shaped by real-world constraints that limited design freedom.
 
-It can be even simler: create a C module with a user defined function that returns a dataset. In Postgres such functions called Set Returning Functions (SRFs). In SQLite corresponding functions called Table-Valued Functions. Creating a domain socket connection to a side-car process, sending and receiving results of KNN or ANN searches seems trivial.
+This project is an opportunity to start from scratch and explore what an “ideal” design might look like (at least from my perspective): one that prioritizes performance and efficiency while minimizing resource usage, without being constrained by existing architectural decisions.
 
-## Memory Management
-This implementation follows LMDB's philosophy: "Very smart people develop the Linux kernel. Let's rely on their work for memory management and use a page cache."
-There are many reasons not to do things this way. But for the purposes of development of this prototype of a system offloading concerns regarding memory management to kernel seems prudent.
+## Main Design Decisions
 
-If one day I have better ideas how to implement memory management for this project, I will do it.
+### Specialized Storage Engine
 
-## Threading Model
-I considered "thread-per-core" threading model. It seems the best model from the point of view of performance and efficiency. But going this way requires implementing my own buffer pool manager, which I decided to avoid at this stage of development.
+I have seen vector data stored on top of general-purpose storage engines such as B-tree–based or LSM-tree–based systems. While these approaches have solid justifications and work well in production, they come with notable inefficiencies for vector workloads.
 
-Thus, the threading model is very simple:
-  - Thread per connection
-  - A pool of working treads processing requests split to multiple concurrent tasks.
+For example:
+- Storing 6 KB vectors in 16 KB B-tree pages results in roughly 25% unnecessary I/O.
+- Managing fixed-size vectors in LSM-tree memtables and SSTables requires significant overhead due to sorting and compaction.
 
-There will be multiple thread pools. For example, a thread pool for processing online requests and another thread pool for building indexes in the background.
+Vector data has specific characteristics:
+- Fixed-size records
+- Often loaded in batches
+- Frequently accessed sequentially
+- More OLAP-like than OLTP in many use cases
 
-The data organization allows processing parts of the data concurrently on multiple threads.
+These properties suggest that a specialized storage layout can be more efficient. Applying full transactional machinery such as WAL to immutable, batch-loaded vector data often provides limited value.
 
-## Concurrency Model
-It's a classical "multiple readers - single writer" model.
-Data can be loaded into the system as a batch from a local file. While data is loading, no other tasks can be executed.
-Running data queries and building indexes can be done concurrently because these tasks do not change the data. Building a index creates a new index without modifying the existing one.
+This project explores a storage engine that writes vectors sequentially into data files, optimized for fast sequential scans while still providing indexes for direct record access.
 
-## Dependencies
-I am using LMDB storage engine for storing index data. LMDB supports "single key - multiple values" data model, which was handy for storing IVF index data.
+### Out-of-Process Storage Engine
 
+Storage engines are typically implemented as in-process libraries linked directly into a database executable. In this project, I am experimenting with an out-of-process model.
 
+The storage engine runs as a standalone process, accessed through a lightweight adapter library integrated into the database. In the simplest form, this could be implemented as a C extension exposing a user-defined function that returns a dataset.
+
+For example:
+- In PostgreSQL, this would be a Set-Returning Function (SRF).
+- In SQLite, a Table-Valued Function.
+
+Communicating with a sidecar process over a domain socket and exchanging results for KNN or ANN queries is relatively straightforward and allows for clean separation of concerns.
+
+### Memory Management
+
+The project follows a philosophy similar to LMDB’s: rely on the operating system’s page cache and kernel-level memory management rather than implementing a custom buffer pool.
+
+There are valid reasons not to take this approach, but for a research prototype it significantly reduces complexity and allows focus on higher-level design questions.
+
+If better ideas for memory management emerge later, this decision can be revisited.
+
+### Threading Model
+
+I considered a thread-per-core model, which often provides excellent performance and efficiency. However, adopting it would require implementing a custom buffer pool manager, which I wanted to avoid at this stage.
+
+Instead, the current threading model is intentionally simple:
+- One thread per client connection
+- One or more worker thread pools for processing requests split into concurrent tasks
+
+Multiple thread pools may exist for different workloads, such as:
+- Online query processing
+- Background index building
+
+The data layout is designed to allow concurrent processing of different data segments across threads.
+
+### Concurrency Model
+
+The system uses a classic multiple-readers, single-writer concurrency model.
+
+- Data is loaded in batches from local files.
+- While data loading is in progress, no other operations are allowed.
+- Queries and index building can run concurrently, as they do not modify existing data.
+- Index creation produces new indexes without altering existing ones.
+
+### Dependencies
+
+LMDB is used for storing index data. Its support for a single-key, multiple-values data model is particularly useful for implementing IVF-style index structures.

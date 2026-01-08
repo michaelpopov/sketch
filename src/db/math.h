@@ -81,5 +81,13 @@ void apply_sum(const T* a, double* b, uint64_t dim) {
     }
 }
 
+template <typename T>
+__attribute__((simd))
+void calc_residual(const T* rec, const T* cent, T* residual, uint64_t dim) {
+    for (uint64_t i = 0; i < dim; i++) {
+        residual[i] = rec[i] - cent[i];
+    }
+}
+
 
 } // namespace sketch

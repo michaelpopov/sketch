@@ -12,7 +12,7 @@ namespace sketch {
 
 static CommandNames supported_commands = { "USE", "GENERATE", "LOAD", "DUMP", "FIND", "KNN",
                                            "SAMPLE", "KMEANS++", "MAKE_CENTROIDS", "MAKE_IVF",
-                                           "ANN", "GC", "SHOW_IVF" };
+                                           "ANN", "GC", "SHOW_IVF", "MAKE_RESIDUAL", "MAKE_PQ_CENTROIDS" };
 
 DataCommandProcessor::DataCommandProcessor(Engine& engine)
   : engine_(engine) {
@@ -65,6 +65,10 @@ Ret DataCommandProcessor::process_command(Commands& commands, bool is_help) {
             return process_ann_cmd(commands, is_help);
         } else if (cmd_type == "GC") {
             return process_gc_cmd(commands, is_help);
+        } else if (cmd_type == "MAKE_RESIDUAL") {
+            return process_make_residual_cmd(commands, is_help);
+        } else if (cmd_type == "MAKE_PQ_CENTROIDS") {
+            return process_make_pq_centroids_cmd(commands, is_help);
         }
     }
 
@@ -542,6 +546,35 @@ Ret DataCommandProcessor::process_gc_cmd(Commands& commands, bool is_help) {
     }
 
     return current_dataset_->gc();
+}
+
+Ret DataCommandProcessor::process_make_residual_cmd(Commands& commands, bool is_help) {
+    if (is_help) {
+        return Ret(0, "MAKE_RESIDUAL command help: MAKE_RESIDUAL <count>");
+    }
+
+    if (commands.size() < 2) {
+        return "MAKE_RESIDUAL command requires additional parameters";
+    }
+
+    PARAM(1, count);
+
+    return current_dataset_->make_residual(count, engine_.thread_pool());
+}
+
+Ret DataCommandProcessor::process_make_pq_centroids_cmd(Commands& commands, bool is_help) {
+    if (is_help) {
+        return Ret(0, "MAKE_PQ_CENTROIDS command help: MAKE_PQ_CENTROIDS <count>");
+    }
+
+    if (commands.size() < 2) {
+        return "MAKE_PQ_CENTROIDS command requires additional parameters";
+    }
+
+    PARAM(1, count);
+
+    return current_dataset_->make_pq_centroids(count, engine_.thread_pool());
+
 }
 
 } // namespace sketch

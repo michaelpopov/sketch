@@ -6,7 +6,8 @@ INCS := -I$(PROJECT_HOME)/src -I$(PROJECT_HOME)/include
 SOURCES := config.cpp command_router.cpp ddl_command_processor.cpp \
            data_command_processor.cpp engine.cpp string_utils.cpp core.cpp \
 		   storage.cpp input_data.cpp dataset_node.cpp dataset.cpp \
-		   catalog.cpp ivf_builder.cpp lmdb2.cpp centroids.cpp
+		   catalog.cpp ivf_builder.cpp lmdb2.cpp centroids.cpp dataset_ivf.cpp \
+		   dataset_node_ivf.cpp
 OBJS := $(subst .cpp,.o,$(SOURCES))
 
 TEST_SOURCES := utest_main.cpp utest_storage.cpp utest_thread_pool.cpp utest_ddl.cpp \

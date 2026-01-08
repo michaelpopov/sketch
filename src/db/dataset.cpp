@@ -15,18 +15,13 @@
 #include <sstream>
 
 #include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 
 namespace sketch {
-
-#define READ_OP_HEADER \
-    if (shutting_down_) return -1; \
-    const InUseMarker in_use_marker(in_use_count_); \
-    const ReadGuard guard(rw_lock_);
-
-#define WRITE_OP_HEADER \
-    if (shutting_down_) return -1; \
-    const InUseMarker in_use_marker(in_use_count_); \
-    const WriteGuard guard(rw_lock_);
 
 static Ret make_error(const std::string& message) {
     LOG_ERROR << message;
@@ -85,10 +80,7 @@ Ret Dataset::remove() {
 Ret Dataset::init() {
     try {
         auto ret = read_metadata();
-        if (ret != 0) {
-            return ret;
-        }
-
+        CHECK(ret)
     } catch (const std::filesystem::filesystem_error& e) {
         return make_error(std::format("Filesystem error: {}", e.what()));
     } catch (const std::exception& e) {
@@ -102,10 +94,11 @@ Ret Dataset::init() {
     if (std::filesystem::exists(centroids_path)) {
         centroids_ = std::make_unique<Centroids>();
         auto ret = centroids_->init(centroids_path);
-        if (ret != 0) {
-            return ret;
-        }
+        CHECK(ret)
     }
+
+    auto ret = load_pq_centroids();
+    CHECK(ret)
 
     return 0;
 }
@@ -135,6 +128,7 @@ Ret Dataset::write_metadata() {
     metadata_file << "DIMENSION=" << metadata_.dim << "\n";
     metadata_file << "NODES_COUNT=" << metadata_.nodes_count << "\n";
     metadata_file << "INDEX=" << metadata_.index_id << "\n";
+    metadata_file << "PQ_COUNT=" << metadata_.pq_count << "\n";
 
     metadata_file.close();
 
@@ -172,6 +166,8 @@ Ret Dataset::read_metadata() {
             metadata_.nodes_count = std::stoul(value);
         } else if (key == "INDEX") {
             metadata_.index_id = std::stoul(value);
+        } else if (key == "PQ_COUNT") {
+            metadata_.pq_count = std::stoul(value);
         } else {
             return make_error(std::format("Unknown key in metadata file '{}': {}", metadata_path.string(), key));
         }
@@ -508,212 +504,6 @@ Ret Dataset::knn(KnnType type, uint64_t count, const std::vector<uint8_t>& data,
     return Ret(0, sstream.str());
 }
 
-Ret Dataset::sample_records(IvfBuilder& builder, ThreadPool* thread_pool) {
-    uint64_t per_node_count = builder.records_count() / nodes_.size();
-    if (per_node_count * nodes_.size() != builder.records_count()) {
-        per_node_count += 1;
-    }
-
-    uint32_t from = 0;
-    if (thread_pool) {
-        std::vector<std::future<Ret>> futures;
-        futures.reserve(nodes_.size());
-
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            auto node = get_node(node_index);
-            if (!node) {
-                return -1;
-            }
-
-            futures.push_back(thread_pool->submit([node_ptr = node.get(), &builder, from, per_node_count] {
-                return node_ptr->sample_records(builder, from, per_node_count);
-            }));
-
-            from += per_node_count;
-        }
-
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            auto _ = futures[node_index].get();
-        }
-
-    } else {
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            auto node = get_node(node_index);
-            if (!node) {
-                return -1;
-            }
-
-            auto _ = node->sample_records(builder, from, per_node_count);
-            from += per_node_count;
-        }
-    }
-
-    return 0;
-}
-
-Ret Dataset::init_centroids_kmeans_plus_plus(IvfBuilder& builder, ThreadPool* thread_pool) {
-    auto ret = sample_records(builder, thread_pool);
-    if (ret != 0) {
-        return ret;
-    }
-
-    ret = builder.init_centroids_kmeans_plus_plus();
-    if (ret != 0) {
-        return ret;
-    }
-
-    std::stringstream sstream;
-    for (size_t i = 0; i < builder.centroids_count(); i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(builder.get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(builder.get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-        }
-    }
-
-    return Ret(0, sstream.str(), true);
-}
-
-Ret Dataset::write_index(IvfBuilder& builder, ThreadPool* thread_pool) {
-    auto ret = write_centroids(builder);
-    builder.uninit();
-    if (ret != 0) {
-        return ret;
-    }
-
-    ret = write_index_internal(thread_pool);
-    if (ret != 0) {
-        return ret;
-    }
-
-    return update_and_write_metadata();
-}
-
-Ret Dataset::write_centroids(IvfBuilder& builder) {
-    const uint64_t next_index_id = metadata_.index_id + 1;
-    const std::string index_path = path_ + "/index_" + std::to_string(next_index_id);
-    if (!std::filesystem::create_directory(index_path)) {
-        return std::format("Failed to create index directory {}", index_path);
-    }
-
-    const std::string centroids_path = index_path + "/centroids";
-    return Centroids::write_centroids(centroids_path, builder);
-}
-
-Ret Dataset::write_index_internal(ThreadPool* thread_pool) {
-    const InUseMarker in_use_marker(in_use_count_);
-
-    const uint64_t next_index_id = metadata_.index_id + 1;
-    const std::string index_path = path_ + "/index_" + std::to_string(next_index_id);
-    const std::string centroids_path = index_path + "/centroids";
-    if (!std::filesystem::exists(centroids_path)) {
-        return "Centroids file does not exist";
-    }
-
-    auto centroids = std::make_unique<Centroids>();
-    auto ret = centroids->init(centroids_path);
-    if (ret != 0) {
-        return ret;
-    }
-
-    if (thread_pool) {
-        std::vector<std::future<Ret>> futures;
-        futures.reserve(nodes_.size());
-
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            auto node = get_node(node_index);
-            if (!node) {
-                return -1;
-            }
-
-            futures.push_back(thread_pool->submit([node_ptr = node.get(), &centroids, next_index_id] {
-                return node_ptr->write_index(*centroids, next_index_id);
-            }));
-        }
-
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            Ret res = futures[node_index].get();
-            if (res != 0) {
-                LOG_DEBUG << "ERROR: " << res.message();                
-                ret = res;
-            }
-        }
-
-    } else {
-        for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-            auto node = get_node(node_index);
-            if (!node) {
-                return -1;
-            }
-
-            Ret res = node->write_index(*centroids, next_index_id);
-            if (res != 0) {
-                ret = res;
-            }
-        }
-    }
-
-    return ret;
-}
-
-Ret Dataset::update_and_write_metadata() {
-    metadata_.index_id++;
-    auto ret = write_metadata();
-    if (ret != 0) {
-        return ret;
-    }
-
-    for (auto& node : nodes_) {
-        node->uninit();
-        node.reset();
-    }
-
-    const std::string index_path = path_ + "/index_" + std::to_string(metadata_.index_id);
-    const std::string centroids_path = index_path + "/centroids";
-    centroids_ = std::make_unique<Centroids>();
-    ret = centroids_->init(centroids_path);
-    if (ret != 0) {
-        return ret;
-    }
-
-    std::stringstream sstream;
-    for (size_t i = 0; i < centroids_->size() && i < 16; i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-        }
-    }
-
-    return Ret(0, sstream.str(), true);
-}
-
 Ret Dataset::ann(uint64_t count, uint64_t nprobes, const std::vector<uint8_t>& data, uint64_t skip_tag, ThreadPool* thread_pool) {
     READ_OP_HEADER
 
@@ -810,36 +600,5 @@ Ret Dataset::gc() {
     return 0;
 }
 
-Ret Dataset::show_ivf() {
-    READ_OP_HEADER
-
-    if (!centroids_) {
-        return "Centroids not initialized";
-    };
-
-    std::stringstream sstream;
-    for (size_t i = 0; i < centroids_->size(); i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-        }
-    }
-
-    return Ret(0, sstream.str(), true);
-}
 
 } // namespace sketch

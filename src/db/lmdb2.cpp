@@ -6,7 +6,7 @@
 
 namespace sketch {
 
-#define CHECK(x) { \
+#define LMDB_CHECK(x) { \
     auto ret = (x); \
     if (MDB_SUCCESS != ret) { \
         LOG_ERROR << ret << "    " << #x; \
@@ -29,11 +29,11 @@ LmdbEnv::~LmdbEnv() {
 
 int LmdbEnv::init() {
     assert(env_ == nullptr);
-    CHECK(mdb_env_create(&env_));
-    CHECK(mdb_env_set_maxdbs(env_, max_dbs));
-    CHECK(mdb_env_set_maxreaders(env_, max_readers));
-    CHECK(mdb_env_set_mapsize(env_, db_size));
-    CHECK(mdb_env_open(env_, path_.c_str(), env_flags, permissions));
+    LMDB_CHECK(mdb_env_create(&env_));
+    LMDB_CHECK(mdb_env_set_maxdbs(env_, max_dbs));
+    LMDB_CHECK(mdb_env_set_maxreaders(env_, max_readers));
+    LMDB_CHECK(mdb_env_set_mapsize(env_, db_size));
+    LMDB_CHECK(mdb_env_open(env_, path_.c_str(), env_flags, permissions));
     return 0;
 }
 
@@ -75,7 +75,7 @@ int Lmdb::create() {
     assert(tid_ == std::this_thread::get_id());
 
     MDB_txn *txn = nullptr;
-    CHECK(mdb_txn_begin(env_, NULL, 0, &txn));
+    LMDB_CHECK(mdb_txn_begin(env_, NULL, 0, &txn));
     std::experimental::scope_exit txn_aborter([&] {
         if (txn) {
             mdb_txn_abort(txn);
@@ -83,10 +83,10 @@ int Lmdb::create() {
     });
 
     MDB_dbi table_dbi;
-    CHECK(mdb_dbi_open(txn, MapTableName, MDB_CREATE, &table_dbi));
+    LMDB_CHECK(mdb_dbi_open(txn, MapTableName, MDB_CREATE, &table_dbi));
 
     MDB_dbi index_dbi;
-    CHECK(mdb_dbi_open(txn, IndexTableName, MDB_CREATE | MDB_DUPSORT, &index_dbi));
+    LMDB_CHECK(mdb_dbi_open(txn, IndexTableName, MDB_CREATE | MDB_DUPSORT, &index_dbi));
 
     mdb_txn_commit(txn);
     txn = nullptr;
@@ -102,9 +102,9 @@ int Lmdb::open(LmdbMode mode) {
 
     mode_ = mode;
     int txn_flags = mode_ == LmdbMode::Read ? MDB_RDONLY : 0;
-    CHECK(mdb_txn_begin(env_, NULL, txn_flags, &txn_));
-    CHECK(mdb_dbi_open(txn_, MapTableName, 0, &table_dbi_));
-    CHECK(mdb_dbi_open(txn_, IndexTableName, 0, &index_dbi_));
+    LMDB_CHECK(mdb_txn_begin(env_, NULL, txn_flags, &txn_));
+    LMDB_CHECK(mdb_dbi_open(txn_, MapTableName, 0, &table_dbi_));
+    LMDB_CHECK(mdb_dbi_open(txn_, IndexTableName, 0, &index_dbi_));
 
     return 0;
 }

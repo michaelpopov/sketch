@@ -45,11 +45,16 @@ enum class DatasetType {
 static constexpr uint64_t HeaderSize = sizeof(uint64_t);
 
 static inline uint64_t calc_record_size(DatasetType type, size_t dim) {
+    uint64_t record_size = 0;
     switch (type) {
-        case DatasetType::f32: return dim * sizeof(float);
-        case DatasetType::f16: return dim * sizeof(float16_t);
+        case DatasetType::f32: record_size = dim * sizeof(float); break;
+        case DatasetType::f16: record_size = dim * sizeof(float16_t); break;
     }
-    return 0;
+
+    constexpr size_t alignment = sizeof(uint64_t);
+    record_size = (record_size + alignment - 1) & ~(alignment - 1);
+
+    return record_size;
 }
 
 struct DatasetMetadata {
@@ -57,6 +62,7 @@ struct DatasetMetadata {
     size_t dim = 1024;
     size_t nodes_count = 1;
     size_t index_id = 0;
+    size_t pq_count = 0;
     uint64_t record_size() const {
         return calc_record_size(type, dim);
     }
@@ -84,6 +90,11 @@ private:
     std::string message_;
     bool is_content_ = false;
 };
+
+#define CHECK(ret) \
+    if (ret != 0) { \
+        return ret; \
+    }
 
 class DataBuffer {
 public:
