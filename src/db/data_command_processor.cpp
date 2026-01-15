@@ -521,7 +521,7 @@ Ret DataCommandProcessor::process_make_pq_centroids_cmd(Commands& commands, bool
 
 Ret DataCommandProcessor::process_mock_ivf_centroids_cmd(Commands& commands, bool is_help) {
     if (is_help) {
-        return Ret(0, "MOCK_IVF command help: MOCK_IVF <centroids_count> <residuals_count>");
+        return Ret(0, "MOCK_IVF command help: MOCK_IVF <centroids_count> <residuals_count> <chunk_count> <pq_depth>");
     }
 
     if (commands.size() < 3) {
@@ -530,8 +530,10 @@ Ret DataCommandProcessor::process_mock_ivf_centroids_cmd(Commands& commands, boo
 
     PARAM(1, centroids_count);
     PARAM(2, residuals_count);
+    PARAM(3, chunk_count);
+    PARAM(4, pq_centroids_count);
 
-    return current_dataset_->mock_ivf(centroids_count, residuals_count);
+    return current_dataset_->mock_ivf(centroids_count, residuals_count, chunk_count, pq_centroids_count);
 }
 
 } // namespace sketch

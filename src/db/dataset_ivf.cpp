@@ -273,7 +273,7 @@ Ret Dataset::dump_ivf() {
     return Ret(0, sstream.str(), true);
 }
 
-Ret Dataset::make_residuals(uint64_t count, ThreadPool* thread_pool, MakeResidualsTestFunc test_func) {
+Ret Dataset::make_residuals(uint64_t count, ThreadPool* thread_pool) {
     READ_OP_HEADER
 
     if (!centroids_) {
@@ -314,7 +314,7 @@ Ret Dataset::make_residuals(uint64_t count, ThreadPool* thread_pool, MakeResidua
 
     uint8_t* mapped_u8 = reinterpret_cast<uint8_t*>(mapped);
     auto per_node_count = count / nodes_.size();
-    bool is_test_run = test_func != nullptr;
+    bool is_test_run = make_residuals_test_func_ != nullptr;
 
     Ret res{0};
     if (thread_pool) {
@@ -354,8 +354,8 @@ Ret Dataset::make_residuals(uint64_t count, ThreadPool* thread_pool, MakeResidua
         }
     }
 
-    if (res == 0 && test_func) {
-        res = test_func(metadata_.type, metadata_.dim, count, mapped_u8);
+    if (res == 0 && make_residuals_test_func_) {
+        res = make_residuals_test_func_(metadata_.type, metadata_.dim, count, mapped_u8);
     }
 
     return res;
@@ -432,7 +432,7 @@ private:
 
 };
 
-Ret Dataset::make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_count, ThreadPool* thread_pool, MakePqCentroidsTestFunc test_func) {
+Ret Dataset::make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_count, ThreadPool* thread_pool) {
     READ_OP_HEADER
 
     if (metadata_.dim % chunk_count != 0) {
@@ -526,8 +526,8 @@ Ret Dataset::make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_count
     ret = load_pq_centroids();
     CHECK(ret)
 
-    if (test_func) {
-        (void)test_func(pq_centroids_);
+    if (make_pq_centroids_test_func_) {
+        (void)make_pq_centroids_test_func_(pq_centroids_);
     }
 
     return 0;
@@ -552,7 +552,7 @@ Ret Dataset::load_pq_centroids() {
     return 0;
 }
 
-Ret Dataset::mock_ivf(uint64_t centroids_count, uint64_t sample_count, MockIvfTestFunc test_func) {
+Ret Dataset::mock_ivf(uint64_t centroids_count, uint64_t sample_count, uint64_t chunk_count, uint64_t pq_centroids_depth) {
     READ_OP_HEADER
 
     const uint64_t prev_index_id = metadata_.index_id;
@@ -567,26 +567,12 @@ Ret Dataset::mock_ivf(uint64_t centroids_count, uint64_t sample_count, MockIvfTe
 
     assert(prev_index_id + 1 == metadata_.index_id);
 
-    if (test_func) {
-        test_func(centroids_);
+    if (mock_ivf_test_func_) {
+        mock_ivf_test_func_(centroids_);
     }
 
-    /*
-    for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
-        auto node = get_node(node_index);
-        if (!node) {
-            return -1;
-        }
-
-        CHECK(node->mock_ivf(builder, metadata_.index_id))
-        nodes_[node_index].reset();
-    }
-
-    CHECK(make_residual(residuals_count))
-
-    const uint64_t chunk_count = 4;
-    CHECK(make_pq_centroids(chunk_count))
-    */
+    CHECK(make_residuals(sample_count))
+    CHECK(make_pq_centroids(chunk_count, pq_centroids_depth))
 
     return 0;
 }

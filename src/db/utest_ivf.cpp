@@ -110,7 +110,8 @@ TEST(IVF, SamplingTest) {
 
     auto ds = dts.router().dcp().current_dataset();
 
-    ret = ds->make_residuals(sample_count, nullptr, test_func);
+    ds->set_make_residuals_test_func(test_func);
+    ret = ds->make_residuals(sample_count);
     ASSERT_EQ(0, ret) << "ERROR: " << ret.message();
 
     const uint64_t target_avg = 50'000;
@@ -131,7 +132,7 @@ TEST(IVF, SamplingTest) {
     //}
 }
 
-static void print_data(DatasetType type, uint64_t dim, uint64_t count, const uint8_t* data, std::ostream& stream) {
+/*static void print_data(DatasetType type, uint64_t dim, uint64_t count, const uint8_t* data, std::ostream& stream) {
     switch (type) {
         case DatasetType::f32: {
             const float* f = reinterpret_cast<const float*>(data);
@@ -154,7 +155,7 @@ static void print_data(DatasetType type, uint64_t dim, uint64_t count, const uin
             break;
         }
     }
-}
+}*/
 
 void prepare_input_data(const char* path, uint64_t data_count, uint64_t dim, uint64_t centroids_count) {
     float val1 = 1.1;
@@ -214,14 +215,16 @@ TEST(IVF, PqTest) {
         return 0;
     };
 
-    ret = ds->mock_ivf(centroids_count, sample_count, test_func0);
+    ds->set_mock_ivf_test_func(test_func0);
+    ret = ds->mock_ivf(centroids_count, sample_count, chunk_count, pq_centroids_depth);
     ASSERT_EQ(0, ret) << "ERROR: " << ret.message();
 
     auto test_func1 = [] (DatasetType, uint64_t, uint64_t, const uint8_t*) -> Ret {
         return 0;
     };
 
-    ret = ds->make_residuals(sample_count, nullptr, test_func1);
+    ds->set_make_residuals_test_func(test_func1);
+    ret = ds->make_residuals(sample_count);
     ASSERT_EQ(0, ret) << "ERROR: " << ret.message();
 
     uint64_t result_pq_centroids_count = 0;
@@ -241,7 +244,8 @@ TEST(IVF, PqTest) {
         return 0;
     };
 
-    ret = ds->make_pq_centroids(chunk_count, pq_centroids_depth, nullptr, test_func2);
+    ds->set_make_pq_centroids_test_func(test_func2);
+    ret = ds->make_pq_centroids(chunk_count, pq_centroids_depth);
     ASSERT_EQ(0, ret) << "ERROR: " << ret.message();
 
     ASSERT_EQ(chunk_count, result_pq_centroids_count);

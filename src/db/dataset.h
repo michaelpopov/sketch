@@ -44,9 +44,10 @@ public:
     Ret ann(uint64_t count, uint64_t nprobes, const std::vector<uint8_t>& data, uint64_t skip_tag, ThreadPool* thread_pool = nullptr);
     Ret gc();
     Ret dump_ivf();
-    Ret make_residuals(uint64_t count, ThreadPool* thread_pool = nullptr, MakeResidualsTestFunc test_func = nullptr);
-    Ret make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_depth = 256, ThreadPool* thread_pool = nullptr, MakePqCentroidsTestFunc test_func = nullptr);
-    Ret mock_ivf(uint64_t centroids_count, uint64_t sample_count, MockIvfTestFunc test_func = nullptr);
+    Ret make_residuals(uint64_t count, ThreadPool* thread_pool = nullptr);
+    Ret make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_depth = 256, ThreadPool* thread_pool = nullptr);
+    Ret mock_ivf(uint64_t centroids_count, uint64_t sample_count, uint64_t chunk_count, uint64_t pq_centroids_depth=256);
+    Ret write_pq_vectors(ThreadPool* thread_pool = nullptr);
 
 private:
     struct InUseMarker {
@@ -77,6 +78,16 @@ private:
     Ret update_and_write_metadata();
     Ret load_pq_centroids();
 
+
+public:
+    void set_make_residuals_test_func(MakeResidualsTestFunc func) { make_residuals_test_func_ = func; }
+    void set_make_pq_centroids_test_func(MakePqCentroidsTestFunc func) { make_pq_centroids_test_func_ = func; }
+    void set_mock_ivf_test_func(MockIvfTestFunc func) { mock_ivf_test_func_ = func; }
+
+private:
+    MakeResidualsTestFunc make_residuals_test_func_ = nullptr;
+    MakePqCentroidsTestFunc make_pq_centroids_test_func_ = nullptr;
+    MockIvfTestFunc mock_ivf_test_func_ = nullptr;
 };
 using DatasetPtr = std::shared_ptr<Dataset>;
 using Datasets = std::unordered_map<std::string, DatasetPtr>;
