@@ -157,7 +157,7 @@ int InputData::load_items() {
         count++;
     }
 
-    return 0;
+    return offset == size_ ? 0 : -1;
 }
 
 int InputData::get(size_t index, const DatasetMetadata md, uint64_t& tag, std::vector<uint8_t>& vec) const {
@@ -178,6 +178,8 @@ int InputData::get(size_t index, const DatasetMetadata md, uint64_t& tag, std::v
             vec.resize(sizeof(float16_t) * md.dim);
             convert_vector_f16(val.data, vec);
             break;
+        case DatasetType::u8:
+            return -1; // Unsupported type
     }
 
     return 0;

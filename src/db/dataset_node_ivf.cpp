@@ -69,6 +69,9 @@ Ret DatasetNode::write_index(const Centroids& centroids, uint64_t index_id) {
         return std::format("Failed to open LMDB records writer");
     }
 
+    std::vector<uint64_t> per_cluster_counts(centroids.centroids_count());
+
+    uint64_t count = 0;
     for (uint64_t record_id = 0; ; record_id++) {
         Record record;
         auto scan_ret = storage_->scan_record(record_id, record);
@@ -81,16 +84,20 @@ Ret DatasetNode::write_index(const Centroids& centroids, uint64_t index_id) {
         }
 
         uint16_t cluster_id = centroids.find_nearest_centroid(record.data, type_, dim_);
+        per_cluster_counts[cluster_id]++;
+
         auto ret = records_writer->write_record(record.tag, record_id, cluster_id);
         if (ret != 0) {
             return ret;
         }
+
+        count++;
     }
 
     return records_writer->commit();
 }
 
-Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, uint64_t count) {
+Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, uint64_t count, bool is_test_run) {
     auto cursor_reader = lmdb_->open_db();
     if (!cursor_reader) {
         return "Failed to open LMDB records reader";
@@ -102,15 +109,15 @@ Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, 
     uint64_t node_offset = id_ * count * record_size_;
     uint8_t* node_ptr = mapped_u8 + node_offset;
 
-    uint64_t per_cluster_count = count / centroids.size();
-    if (count != per_cluster_count * centroids.size()) {
+    uint64_t per_cluster_count = count / centroids.centroids_count();
+    if (count != per_cluster_count * centroids.centroids_count()) {
         per_cluster_count++;
     }
 
     std::vector<uint32_t> record_ids(per_cluster_count);
 
     uint32_t processed_count = 0;
-    for (uint32_t cluster_id = 0; cluster_id < centroids.size(); cluster_id++) {
+    for (uint32_t cluster_id = 0; cluster_id < centroids.centroids_count(); cluster_id++) {
         int iret = cursor_reader->open_cursor(cluster_id);
         if (iret != 0) {
             LOG_TRACE << "Failed to open cursor for cluster_id=" << cluster_id;
@@ -130,8 +137,10 @@ Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, 
             }
 
             if (scanned_count < per_cluster_count) {
+                //std::cerr << "Selecting record " << record_id << " for cluster " << cluster_id << std::endl;
                 record_ids[scanned_count] = record_id;
             } else {
+                //std::cerr << "Replacing record " << record_id << " for cluster " << cluster_id << std::endl;
                 std::uniform_int_distribution<> distrib(0, scanned_count - 1);
                 uint32_t j = distrib(gen);
                 if (j < per_cluster_count) {
@@ -140,6 +149,10 @@ Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, 
             }
 
             scanned_count++;
+        }
+
+        if (scanned_count < per_cluster_count) {
+            return "Failed to gather enough records for residuals";
         }
 
         uint64_t cluster_offset = cluster_id * per_cluster_count * record_size_;
@@ -154,18 +167,84 @@ Ret DatasetNode::make_residuals(const Centroids& centroids, uint8_t* mapped_u8, 
 
             // Calculate residual
             switch (type_) {
-                case DatasetType::f32:
-                    calc_residual((float*)record.data, (float*)centroid, (float*)residual_data_ptr, dim_);
+                case DatasetType::f32: {
+                    const float* data = reinterpret_cast<const float*>(record.data);
+                    const float* cent = reinterpret_cast<const float*>(centroid);
+                    float* resid = reinterpret_cast<float*>(residual_data_ptr);
+                    if (is_test_run) {
+                        memcpy(resid, data, dim_ * sizeof(float));
+                    } else {
+                        calc_residual(data, cent, resid, dim_);
+                    }
                     break;
+                }
                 case DatasetType::f16: {
-                    calc_residual((float16_t*)record.data, (float16_t*)centroid, (float16_t*)residual_data_ptr, dim_);
+                    const float16_t* data = reinterpret_cast<const float16_t*>(record.data);
+                    const float16_t* cent = reinterpret_cast<const float16_t*>(centroid);
+                    float16_t* resid = reinterpret_cast<float16_t*>(residual_data_ptr);
+                    if (is_test_run) {
+                        memcpy(resid, data, dim_ * sizeof(float16_t));
+                    } else {
+                        calc_residual(data, cent, resid, dim_);
+                    }
                     break;
+                }
+                case DatasetType::u8: {
+                    return "Unsupported dataset type for residuals";
                 }
             }
         }
     }
 
     return 0;
+}
+
+Ret DatasetNode::mock_ivf(const IvfBuilder& builder, uint64_t index_id) {
+    const std::string index_path = dir_path_ + "/index_" + std::to_string(index_id);
+    if (!std::filesystem::exists(index_path)) {
+        std::filesystem::create_directory(index_path);
+    }
+
+    auto ret = create_lmdb(index_path);
+    if (ret != 0) {
+        return ret;
+    }
+
+    auto lmdb = open_lmdb(index_path);
+    if (!lmdb) {
+        return "Failed to initialize LMDB";
+    }
+
+    auto records_writer = lmdb->open_db(LmdbMode::Write);
+    if (!records_writer) {
+        return std::format("Failed to open LMDB records writer");
+    }
+
+    uint16_t cluster_id = 0;
+
+    std::unordered_map<uint64_t, uint64_t> cluster_counts;
+
+    for (uint64_t record_id = 0; ; record_id++) {
+        Record record;
+        auto scan_ret = storage_->scan_record(record_id, record);
+        if (scan_ret == ScanResult::Finished) {
+            break;
+        }
+
+        if (scan_ret == ScanResult::Deleted) {
+            continue;
+        }
+
+        cluster_id = (cluster_id + 1) % builder.centroids_count();
+        cluster_counts[cluster_id]++;
+
+        auto ret = records_writer->write_record(record.tag, record_id, cluster_id);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+
+    return records_writer->commit();
 }
 
 } // namespace sketch

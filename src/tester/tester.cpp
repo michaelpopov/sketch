@@ -163,7 +163,7 @@ void do_work(const std::string& data_dir) {
         if (!print_message || no_output) {
             std::cout << ret.code() << std::endl;
         } else {
-            if (ret.message().empty()) {
+            if (ret.message().empty() && !ret.is_content()) {
                 if (ret.code() == 0)
                     std::cout << "OK" << std::endl << std::endl;
                 else

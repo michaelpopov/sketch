@@ -11,33 +11,16 @@
 #include <fstream>
 #include <format>
 #include <experimental/scope>
-#include <chrono>
 
 using namespace sketch;
 
 #ifdef CLOUD
-const char* GeneratedFile = "/mnt/data/test/generated.data";
+static const char* GeneratedFile = "/mnt/data/test/generated.data";
+static const char* Path = "/mnt/data/test";
 #else
-const char* GeneratedFile = "/home/mpopov/test/generated.data";
+static const char* GeneratedFile = "/home/mpopov/test/generated.data";
+static const char* Path = "/home/mpopov/test";
 #endif
-
-class Timer {
-public:
-    explicit Timer(const std::string& title)
-      : title_(title),
-        start_(std::chrono::high_resolution_clock::now())
-    {}
-
-    ~Timer() {
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-        std::cerr << title_ << ": elapsed time " << duration.count() << " ms" << std::endl;
-    }
-
-private:
-    const std::string title_;
-    const std::chrono::time_point<std::chrono::high_resolution_clock> start_;
-};
 
 class DmlTestSettings {
 public:
@@ -58,7 +41,7 @@ public:
 
         ret = router_->process_command("CREATE CATALOG test;");
         if (ret != 0)  std::cerr << "ERROR: " << ret.message() << std::endl;
-        ret = router_->process_command(std::format("CREATE DATASET test.ds TYPE=f32 DIM={} COUNT={};", dim, count));
+        ret = router_->process_command(std::format("CREATE DATASET test.ds TYPE=f32 DIM={} NODES={};", dim, count));
         if (ret != 0)  std::cerr << "ERROR: " << ret.message() << std::endl;
         ret = router_->process_command("USE test.ds;");
         if (ret != 0)  std::cerr << "ERROR: " << ret.message() << std::endl;
@@ -73,7 +56,7 @@ public:
     CommandRouter& router() { return *router_; }
 
 private:
-    const char* path_ = "/home/mpopov/test";
+    const char* path_ = Path;
     Config cfg_;
     std::unique_ptr<Engine> engine_;
     std::unique_ptr<CommandRouter> router_;
@@ -119,8 +102,6 @@ TEST(DML, RouterLoadDump) {
         auto ret = router.process_command("DUMP");
         ASSERT_EQ(0, ret);
     }
-
-    return;
     
     {
         LOG_DEBUG << "============ DELETE =============";

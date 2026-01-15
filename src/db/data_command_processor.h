@@ -24,6 +24,9 @@ public:
     Ret process_command(Commands& commands, bool is_help);
     const CommandNames& get_supported_commands() const;
 
+    // For testing purposes
+    DatasetPtr current_dataset() const { return current_dataset_; }
+
 private:
     Engine& engine_;
     DatasetPtr current_dataset_;
@@ -39,11 +42,13 @@ private:
     Ret process_kmeanspp_cmd(Commands& commands, bool is_help);
     Ret process_make_centroids_cmd(Commands& commands, bool is_help);
     Ret process_make_ivf_cmd(Commands& commands, bool is_help);
-    Ret process_show_ivf_cmd(Commands& commands, bool is_help);
+    Ret process_dump_ivf_cmd(Commands& commands, bool is_help);
     Ret process_ann_cmd(Commands& commands, bool is_help);
     Ret process_gc_cmd(Commands& commands, bool is_help);
     Ret process_make_residual_cmd(Commands& commands, bool is_help);
     Ret process_make_pq_centroids_cmd(Commands& commands, bool is_help);
+    Ret process_mock_ivf_centroids_cmd(Commands& commands, bool is_help);
+
 };
 
 } // namespace sketch

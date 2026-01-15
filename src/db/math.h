@@ -61,6 +61,8 @@ static inline double distance_L2_square(DatasetType type, const uint8_t* a, cons
             return distance_L2_square<float>(reinterpret_cast<const float*>(a), reinterpret_cast<const float*>(b), dim);
         case DatasetType::f16: 
             return distance_L2_square<float16_t>(reinterpret_cast<const float16_t*>(a), reinterpret_cast<const float16_t*>(b), dim);
+        case DatasetType::u8: 
+            return distance_L2_square<uint8_t>(reinterpret_cast<const uint8_t*>(a), reinterpret_cast<const uint8_t*>(b), dim);
     }
     return 0.0;
 }

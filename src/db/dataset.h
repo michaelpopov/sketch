@@ -4,6 +4,7 @@
 #include "rw_lock.h"
 #include "shared_types.h"
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <queue>
 #include <vector>
@@ -12,6 +13,10 @@ namespace sketch {
 
 class IvfBuilder;
 class ThreadPool;
+
+using MakeResidualsTestFunc = std::function<Ret(DatasetType type, uint64_t dim, uint64_t count, const uint8_t* data)>;
+using MakePqCentroidsTestFunc = std::function<Ret(const std::vector<std::unique_ptr<Centroids>>& pq_centroids)>;
+using MockIvfTestFunc = std::function<Ret(const std::unique_ptr<Centroids>& centroids)>;
 
 class Dataset {
     friend class DatasetHolder;
@@ -38,9 +43,10 @@ public:
     Ret write_index(IvfBuilder& builder, ThreadPool* thread_pool = nullptr);
     Ret ann(uint64_t count, uint64_t nprobes, const std::vector<uint8_t>& data, uint64_t skip_tag, ThreadPool* thread_pool = nullptr);
     Ret gc();
-    Ret show_ivf();
-    Ret make_residual(uint64_t count, ThreadPool* thread_pool = nullptr);
-    Ret make_pq_centroids(uint64_t count, ThreadPool* thread_pool = nullptr);
+    Ret dump_ivf();
+    Ret make_residuals(uint64_t count, ThreadPool* thread_pool = nullptr, MakeResidualsTestFunc test_func = nullptr);
+    Ret make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_depth = 256, ThreadPool* thread_pool = nullptr, MakePqCentroidsTestFunc test_func = nullptr);
+    Ret mock_ivf(uint64_t centroids_count, uint64_t sample_count, MockIvfTestFunc test_func = nullptr);
 
 private:
     struct InUseMarker {

@@ -143,6 +143,10 @@ int convert_vector_f16(const std::string_view& str, std::vector<uint8_t>& vec) {
     return convert_vector<float16_t>(str, vec);
 }
 
+int convert_vector_u8(const std::string_view& str, std::vector<uint8_t>& vec) {
+    return convert_vector<uint8_t>(str, vec);
+}
+
 template <typename T>
 static int convert_ptr(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty) {
     size_t offset = 0;
@@ -197,6 +201,10 @@ int convert_ptr_f32(const std::string_view& str, uint8_t* ptr, size_t count, boo
 
 int convert_ptr_f16(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty) {
     return convert_ptr<float16_t>(str, ptr, count, is_empty);
+}
+
+int convert_ptr_u8(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty) {
+    return convert_ptr<uint8_t>(str, ptr, count, is_empty);
 }
 
 const char* findchr(const char* start, char ch, size_t size) {

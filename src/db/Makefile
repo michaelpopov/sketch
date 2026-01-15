@@ -11,7 +11,8 @@ SOURCES := config.cpp command_router.cpp ddl_command_processor.cpp \
 OBJS := $(subst .cpp,.o,$(SOURCES))
 
 TEST_SOURCES := utest_main.cpp utest_storage.cpp utest_thread_pool.cpp utest_ddl.cpp \
-				utest_test_data.cpp utest_dml.cpp utest_lmdb.cpp utest_math.cpp
+				utest_test_data.cpp utest_dml.cpp utest_lmdb.cpp utest_math.cpp \
+				utest_ivf.cpp
 TEST_OBJS := $(subst .cpp,.o,$(TEST_SOURCES))
 
 LIBS :=  -lgtest -lpthread

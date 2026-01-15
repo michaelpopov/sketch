@@ -87,6 +87,10 @@ const uint8_t* IvfBuilder::get_centroids(SetType setType) const {
 }
 
 Ret IvfBuilder::init_centroids_kmeans_plus_plus() {
+    if (type_ == DatasetType::u8) {
+        return "KMeans++ initialization does not support u8 dataset type";
+    }
+
     // 1. Pick first center randomly
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -134,6 +138,8 @@ Ret IvfBuilder::init_centroids_kmeans_plus_plus() {
                     case DatasetType::f16:
                         dist_sq = distance_L2_square((float16_t*)p, (float16_t*)c, dim_);
                         break;
+                    case DatasetType::u8:
+                        return "KMeans++ initialization does not support u8 dataset type";
                 }
 
                 min_dist_sq = std::min(min_dist_sq, dist_sq);
@@ -214,6 +220,7 @@ Ret IvfBuilder::internal_recalc_centroids() {
         switch (type_) {
             case DatasetType::f32: apply_sum(reinterpret_cast<const float*>(record), sums, dim_); break;
             case DatasetType::f16: apply_sum(reinterpret_cast<const float16_t*>(record), sums, dim_); break;
+            case DatasetType::u8: return "Recalculation of centroids does not support u8 dataset type";
         }
         counts[best_centroid_index]++;   
     }
@@ -231,6 +238,7 @@ Ret IvfBuilder::internal_recalc_centroids() {
         switch (type_) {
             case DatasetType::f32: apply_div(reinterpret_cast<float*>(centroid), sums, dim_, counts[j]); break;
             case DatasetType::f16: apply_div(reinterpret_cast<float16_t*>(centroid), sums, dim_, counts[j]); break;
+            case DatasetType::u8: return "Recalculation of centroids does not support u8 dataset type";
         }
     }
 

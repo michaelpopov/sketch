@@ -17,6 +17,10 @@ public:
     Ret init();
     Ret process_command(Commands& commands);
     Ret process_command(const std::string& cmd);
+
+    // For testing purposes
+    DataCommandProcessor& dcp() { return *data_command_processor_; }
+
 private:
     Engine& engine_;
     std::unique_ptr<DDLCommandProcessor> ddl_command_processor_;

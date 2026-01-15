@@ -1,12 +1,15 @@
 #pragma once
+#include <chrono>
 #include <cassert>
 #include <cstdint>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <string.h>
+#include <stdio.h>
 
 namespace sketch {
 
@@ -32,6 +35,7 @@ enum class KnnType {
 };
 
 enum class DatasetType {
+    u8,
     f16,
     f32,
 };
@@ -49,6 +53,7 @@ static inline uint64_t calc_record_size(DatasetType type, size_t dim) {
     switch (type) {
         case DatasetType::f32: record_size = dim * sizeof(float); break;
         case DatasetType::f16: record_size = dim * sizeof(float16_t); break;
+        case DatasetType::u8: record_size = dim * sizeof(uint8_t); break;
     }
 
     constexpr size_t alignment = sizeof(uint64_t);
@@ -166,4 +171,31 @@ private:
     const size_t header_size_;
     std::vector<uint8_t> buffer_;
 };
+
+static inline void PRINT(int n) {
+    for (int i = 0; i < 32; i++) {
+        printf("%d", n);
+    }
+    printf("\n");
+}
+
+class Timer {
+public:
+    explicit Timer(const std::string& title)
+      : title_(title),
+        start_(std::chrono::high_resolution_clock::now())
+    {}
+
+    ~Timer() {
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
+        std::cerr << title_ << ": elapsed time " << duration.count() << " ms" << std::endl;
+    }
+
+private:
+    const std::string title_;
+    const std::chrono::time_point<std::chrono::high_resolution_clock> start_;
+};
+
+
 } // namespace sketch

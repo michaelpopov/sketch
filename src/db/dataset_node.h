@@ -59,7 +59,8 @@ public:
     Ret write_index(const Centroids& centroids, uint64_t index_id);
     DistItems ann(const std::vector<uint16_t>& cluster_ids, uint64_t count, const std::vector<uint8_t>& data, uint64_t skip_tag);
     Ret gc(uint64_t current_index_id);
-    Ret make_residuals(const Centroids& centroids, uint8_t* mapped_u8, uint64_t count);
+    Ret make_residuals(const Centroids& centroids, uint8_t* mapped_u8, uint64_t count, bool is_test_run = false);
+    Ret mock_ivf(const IvfBuilder& builder, uint64_t index_id);
 
 private:
     static constexpr uint64_t INVALID_TAG = 0xFFFFFFFFFFFFFFFF;

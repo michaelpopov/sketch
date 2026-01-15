@@ -28,9 +28,11 @@ uint64_t u64_from_string_view(const std::string_view& str);
 
 int convert_vector_f32(const std::string_view& str, std::vector<uint8_t>& vec);
 int convert_vector_f16(const std::string_view& str, std::vector<uint8_t>& vec);
+int convert_vector_u8(const std::string_view& str, std::vector<uint8_t>& vec);
 
 int convert_ptr_f32(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty);
 int convert_ptr_f16(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty);
+int convert_ptr_u8(const std::string_view& str, uint8_t* ptr, size_t count, bool& is_empty);
 
 const char* findchr(const char* start, char ch, size_t size);
 size_t findchrpos(const char* start, char ch, size_t size);

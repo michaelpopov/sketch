@@ -7,6 +7,7 @@
 #include "thread_pool.h"
 #include "log.h"
 
+#include <algorithm>
 #include <experimental/scope>
 #include <filesystem>
 #include <format>
@@ -78,26 +79,7 @@ Ret Dataset::init_centroids_kmeans_plus_plus(IvfBuilder& builder, ThreadPool* th
     }
 
     std::stringstream sstream;
-    for (size_t i = 0; i < builder.centroids_count(); i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(builder.get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(builder.get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-        }
-    }
+    print_centroids(metadata_.type, metadata_.dim, 16, builder, sstream);
 
     return Ret(0, sstream.str(), true);
 }
@@ -205,31 +187,37 @@ Ret Dataset::update_and_write_metadata() {
     }
 
     std::stringstream sstream;
-    for (size_t i = 0; i < centroids_->size() && i < 16; i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-        }
-    }
+    print_centroids(metadata_.type, metadata_.dim, 16, *centroids_, sstream);
 
     return Ret(0, sstream.str(), true);
 }
 
-Ret Dataset::show_ivf() {
+static void print_data(DatasetType type, uint64_t dim, uint64_t count, const uint8_t* data, std::ostream& stream) {
+    switch (type) {
+        case DatasetType::f32: {
+            const float* f = reinterpret_cast<const float*>(data);
+            for (uint64_t i = 0; i < dim && i < count; i++) {
+                stream << f[i] << ", ";
+            }
+            break;
+        }
+        case DatasetType::f16: {
+            const float16_t* f16 = reinterpret_cast<const float16_t*>(data);
+            for (uint64_t i = 0; i < dim && i < count; i++) {
+                stream << f16[i] << ", ";
+            }
+            break;
+        }
+        case DatasetType::u8: {
+            for (uint64_t i = 0; i < dim && i < count; i++) {
+                stream << (int)data[i] << ", ";
+            }
+            break;
+        }
+    }
+}
+
+Ret Dataset::dump_ivf() {
     READ_OP_HEADER
 
     if (!centroids_) {
@@ -237,39 +225,63 @@ Ret Dataset::show_ivf() {
     };
 
     std::stringstream sstream;
-    for (size_t i = 0; i < centroids_->size(); i++) {
-        switch (metadata_.type) {
-            case DatasetType::f32: {
-                const float* f = reinterpret_cast<const float*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
-            case DatasetType::f16: {
-                const float16_t* f = reinterpret_cast<const float16_t*>(centroids_->get_centroid(i));
-                for (size_t d = 0; d < metadata_.dim && d < 4; d++) {
-                    sstream << f[d] << ", ";
-                }
-                sstream << "\n";
-                break;
-            }
+
+    sstream << "===== Centroids: ====\n";
+    print_centroids(metadata_.type, metadata_.dim, centroids_->centroids_count(), *centroids_, sstream);
+
+    const uint64_t max_residuals_to_print = 16;
+    const std::string residuals_path = path_ + "/index_" + std::to_string(metadata_.index_id) + "/residuals";
+    if (std::filesystem::exists(residuals_path)) {
+        sstream << "\n";
+        sstream << "Residuals:\n";
+        const uint64_t record_size = metadata_.record_size();
+        std::ifstream residuals_file(residuals_path, std::ios::binary);
+        if (!residuals_file.is_open()) {
+            return std::format("Failed to open residuals file at '{}'", residuals_path);
         }
+
+        std::vector<uint8_t> record_data(record_size);
+        uint64_t record_index = 0;
+        while (true && record_index < max_residuals_to_print) {
+            residuals_file.read(reinterpret_cast<char*>(record_data.data()), record_size);
+            if (residuals_file.eof()) {
+                break;
+            }
+
+            sstream << "  Residual " << record_index << ": ";
+            print_data(metadata_.type, metadata_.dim, 4, record_data.data(), sstream);
+            sstream << "\n";
+            record_index++;
+        }
+
     }
+
+    sstream << "\n";
+    sstream << "PQ Centroids:\n";
+    for (size_t pq_index = 0; pq_index < pq_centroids_.size(); pq_index++) {
+        sstream << "  PQ Chunk " << pq_index << ":\n";
+        print_centroids(
+            metadata_.type,
+            metadata_.dim / pq_centroids_.size(),
+            std::min(8UL, pq_centroids_[pq_index]->centroids_count()),
+            *pq_centroids_[pq_index],
+            sstream);
+        sstream << "\n";
+    }
+    sstream << "\n";
 
     return Ret(0, sstream.str(), true);
 }
 
-Ret Dataset::make_residual(uint64_t count, ThreadPool* thread_pool) {
+Ret Dataset::make_residuals(uint64_t count, ThreadPool* thread_pool, MakeResidualsTestFunc test_func) {
     READ_OP_HEADER
 
     if (!centroids_) {
         return "Centroids not initialized";
     };
 
-    if (count % centroids_->size() != 0) {
-        count = ((count / centroids_->size()) + 1) * centroids_->size();
+    if (count % centroids_->centroids_count() != 0) {
+        count = ((count / centroids_->centroids_count()) + 1) * centroids_->centroids_count();
     }
 
     if (count % nodes_.size() != 0) {
@@ -277,6 +289,9 @@ Ret Dataset::make_residual(uint64_t count, ThreadPool* thread_pool) {
     }
 
     const std::string index_path = path_ + "/index_" + std::to_string(metadata_.index_id);
+    if (!std::filesystem::exists(index_path)) {
+        std::filesystem::create_directory(index_path);
+    }
     const std::string residuals_path = index_path + "/residuals";
     const uint64_t record_size = metadata_.record_size();
     const uint64_t residuals_file_size = record_size * count;
@@ -298,6 +313,8 @@ Ret Dataset::make_residual(uint64_t count, ThreadPool* thread_pool) {
     });
 
     uint8_t* mapped_u8 = reinterpret_cast<uint8_t*>(mapped);
+    auto per_node_count = count / nodes_.size();
+    bool is_test_run = test_func != nullptr;
 
     Ret res{0};
     if (thread_pool) {
@@ -310,8 +327,8 @@ Ret Dataset::make_residual(uint64_t count, ThreadPool* thread_pool) {
                 return -1;
             }
 
-            futures.push_back(thread_pool->submit([node_ptr = node.get(), cents = centroids_.get(), cnt = count / nodes_.size(), mapped_u8] {
-                return node_ptr->make_residuals(*cents, mapped_u8, cnt);
+            futures.push_back(thread_pool->submit([node_ptr = node.get(), cents = centroids_.get(), per_node_count, mapped_u8, is_test_run] {
+                return node_ptr->make_residuals(*cents, mapped_u8, per_node_count, is_test_run);
             }));
         }
 
@@ -327,24 +344,18 @@ Ret Dataset::make_residual(uint64_t count, ThreadPool* thread_pool) {
         for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
             auto node = get_node(node_index);
             if (!node) {
-                munmap(mapped, residuals_file_size);
                 return -1;
             }
 
-            auto ret = node->make_residuals(*centroids_, mapped_u8, count / nodes_.size());
+            auto ret = node->make_residuals(*centroids_, mapped_u8, per_node_count, is_test_run);
             if (ret != 0) {
                 return ret;
             }
         }
     }
 
-    for (size_t i = 0; i < count; i++) {
-        uint8_t* record_ptr = mapped_u8 + i * record_size;
-        uint64_t data_item;
-        memcpy(&data_item, record_ptr, sizeof(data_item));
-        if (data_item == 0) {
-            return "Invalid residual data";
-        }
+    if (res == 0 && test_func) {
+        res = test_func(metadata_.type, metadata_.dim, count, mapped_u8);
     }
 
     return res;
@@ -372,7 +383,13 @@ public:
     {}
 
     Ret build_pq_centroids(uint64_t pq_index) const {
-        std::cerr << "Building PQ centroids for chunk " << pq_index << " ..." << std::endl;
+        /*std::cerr << "Building PQ centroids for chunk " << pq_index << " ..." << std::endl;
+        std::cerr << "Record size: " << record_size << std::endl;
+        std::cerr << "PQ centroids record size: " << pq_centroids_record_size << std::endl;
+        std::cerr << "PQ centroid dim: " << pq_centroid_dim << std::endl;
+        std::cerr << "PQ centroids count: " << pq_centroids_count << std::endl;
+        std::cerr << "Records count: " << records_count << std::endl;
+        std::cerr << std::endl;*/
 
         IvfBuilder pq_builder(type, pq_centroid_dim, pq_centroids_count, records_count);
         auto ret = pq_builder.init();
@@ -381,8 +398,12 @@ public:
         for (uint64_t j = 0; j < records_count; j++) {
             const uint8_t* record_ptr = residuals_mapped_u8 + j * record_size;
             const uint8_t* chunk_ptr = record_ptr + pq_index * pq_centroids_record_size;
+
+            //const float* data = reinterpret_cast<const float*>(chunk_ptr);
+            //std::cerr << j << ") " << data[0] << ", " << data[1] << ", " << data[2] << ", " << data[3] << std::endl;
             pq_builder.set_record(j, chunk_ptr);
         }
+        //std::cerr << std::endl;
 
         ret = pq_builder.init_centroids_kmeans_plus_plus();
         CHECK(ret)
@@ -411,7 +432,7 @@ private:
 
 };
 
-Ret Dataset::make_pq_centroids(uint64_t chunk_count, ThreadPool* thread_pool) {
+Ret Dataset::make_pq_centroids(uint64_t chunk_count, uint64_t pq_centroids_count, ThreadPool* thread_pool, MakePqCentroidsTestFunc test_func) {
     READ_OP_HEADER
 
     if (metadata_.dim % chunk_count != 0) {
@@ -455,7 +476,6 @@ Ret Dataset::make_pq_centroids(uint64_t chunk_count, ThreadPool* thread_pool) {
     const uint64_t record_size = metadata_.record_size();
     const uint64_t records_count = st.st_size / record_size;
 
-    const uint64_t pq_centroids_count = 256;
     const uint64_t pq_centroids_record_size = metadata_.record_size() / chunk_count;
     const uint64_t pq_centroid_dim = metadata_.dim / chunk_count;
 
@@ -491,7 +511,7 @@ Ret Dataset::make_pq_centroids(uint64_t chunk_count, ThreadPool* thread_pool) {
 
     } else {
         for (uint64_t i = 0; i < chunk_count; i++) {
-            std::cerr << "Calculating PQ centroids for chunk " << i << " ..." << std::endl;
+            //std::cerr << "Calculating PQ centroids for chunk " << i << " ..." << std::endl;
             auto ret = worker.build_pq_centroids(i);
             CHECK(ret)
         }
@@ -503,7 +523,14 @@ Ret Dataset::make_pq_centroids(uint64_t chunk_count, ThreadPool* thread_pool) {
     auto ret = write_metadata();
     CHECK(ret)
 
-    return load_pq_centroids();
+    ret = load_pq_centroids();
+    CHECK(ret)
+
+    if (test_func) {
+        (void)test_func(pq_centroids_);
+    }
+
+    return 0;
 }
 
 Ret Dataset::load_pq_centroids() {
@@ -525,5 +552,43 @@ Ret Dataset::load_pq_centroids() {
     return 0;
 }
 
+Ret Dataset::mock_ivf(uint64_t centroids_count, uint64_t sample_count, MockIvfTestFunc test_func) {
+    READ_OP_HEADER
+
+    const uint64_t prev_index_id = metadata_.index_id;
+
+    IvfBuilder builder(metadata_.type, metadata_.dim, centroids_count, sample_count);
+    CHECK(builder.init())
+    CHECK(init_centroids_kmeans_plus_plus(builder, nullptr))
+    for (uint64_t i = 0; i < 8; i++) {
+        CHECK(builder.recalc_centroids())
+    }
+    CHECK(write_index(builder))
+
+    assert(prev_index_id + 1 == metadata_.index_id);
+
+    if (test_func) {
+        test_func(centroids_);
+    }
+
+    /*
+    for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
+        auto node = get_node(node_index);
+        if (!node) {
+            return -1;
+        }
+
+        CHECK(node->mock_ivf(builder, metadata_.index_id))
+        nodes_[node_index].reset();
+    }
+
+    CHECK(make_residual(residuals_count))
+
+    const uint64_t chunk_count = 4;
+    CHECK(make_pq_centroids(chunk_count))
+    */
+
+    return 0;
+}
 
 } // namespace sketch

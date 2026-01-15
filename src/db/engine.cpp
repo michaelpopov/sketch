@@ -175,6 +175,7 @@ Ret Engine::show_dataset(const CmdShowDataset& cmd) {
     switch (metadata.type) {
         case DatasetType::f32: result += std::format("Type: {}\n", "f32"); break;
         case DatasetType::f16: result += std::format("Type: {}\n", "f16"); break;
+        case DatasetType::u8: return "U8 type not supported";
     }
     result += std::format("Dim: {}\n", metadata.dim);
     result += std::format("Nodes: {}\n", metadata.nodes_count);

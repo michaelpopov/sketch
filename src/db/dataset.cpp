@@ -124,6 +124,7 @@ Ret Dataset::write_metadata() {
     switch (metadata_.type) {
         case DatasetType::f32: metadata_file << "f32\n"; break;
         case DatasetType::f16: metadata_file << "f16\n"; break;
+        case DatasetType::u8: metadata_file << "u8\n"; break;
     }
     metadata_file << "DIMENSION=" << metadata_.dim << "\n";
     metadata_file << "NODES_COUNT=" << metadata_.nodes_count << "\n";
@@ -157,6 +158,8 @@ Ret Dataset::read_metadata() {
                 metadata_.type = DatasetType::f32;
             } else if (value == "f16") {
                 metadata_.type = DatasetType::f16;
+            } else if (value == "u8") {
+                metadata_.type = DatasetType::u8;
             } else {
                 return make_error(std::format("Unsupported TYPE value in metadata: '{}'", value));
             }
@@ -271,7 +274,7 @@ Ret Dataset::load(const std::string_view& input_path, LoadReport& report, Thread
         for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
             auto node = get_node(node_index);
             if (!node) {
-                return -1;
+                return "Failed to get dataset node";
             }
 
             std::string node_path = load_path + "/" + std::to_string(node_index);
@@ -317,7 +320,7 @@ Ret Dataset::dump(const std::string_view& output_path, ThreadPool* thread_pool) 
             }));
         }
 
-        Ret result_ret{-1};
+        Ret result_ret{0};
         for (size_t node_index = 0; node_index < nodes_.size(); node_index++) {
             Ret ret = futures[node_index].get();
             if (ret != 0) {

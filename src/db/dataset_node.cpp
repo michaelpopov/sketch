@@ -27,13 +27,6 @@ DatasetNode::DatasetNode(uint64_t id, const std::string& path)
 DatasetNode::~DatasetNode() {
 }
 
-/*uint64_t calc_record_size(const DatasetMetadata& metadata) {
-    uint64_t record_size = metadata.record_size();
-    constexpr size_t alignment = sizeof(uint64_t);
-    record_size = (record_size + alignment - 1) & ~(alignment - 1);
-    return record_size;
-}*/
-
 Ret DatasetNode::create(const DatasetMetadata& metadata, uint64_t initial_records_count) {
     type_ = metadata.type;
     dim_ = metadata.dim;
@@ -224,6 +217,7 @@ Ret DatasetNode::load(const std::string& node_path, const DatasetMetadata& metad
         switch (metadata.type) {
             case DatasetType::f16: cret = convert_ptr_f16(item.data, data_buffer.record_ptr(), metadata.dim, is_empty); break;
             case DatasetType::f32: cret = convert_ptr_f32(item.data, data_buffer.record_ptr(), metadata.dim, is_empty); break;
+            case DatasetType::u8: return "U8 type not supported"; break;
         }
 
         if (cret != 0) {
@@ -355,6 +349,9 @@ Ret DatasetNode::dump(const std::string& dump_path, const DatasetMetadata& metad
                 }
                 break;
             }
+            case DatasetType::u8: {
+                return "U8 type not supported";
+            }
         }
         fprintf(f, " ]\n");
     }
@@ -444,6 +441,9 @@ DistItems DatasetNode::knn(const DatasetMetadata& metadata, KnnType type, uint64
             case DatasetType::f16:
                 dist = calc_dist(type, (float16_t*)record.data, (float16_t*)data.data(), metadata.dim);
                 break;
+            case DatasetType::u8:
+                dist = 0.0;
+                break;
         }
 
         pq.push(DistItem{ .dist=dist, .record_id=index, .tag=record.tag});
@@ -519,6 +519,9 @@ DistItems  DatasetNode::ann(const std::vector<uint16_t>& cluster_ids, uint64_t c
                     break;
                 case DatasetType::f16:
                     dist = calc_dist(KnnType::L2, (float16_t*)record.data, (float16_t*)data.data(), dim_);
+                    break;
+                case DatasetType::u8:
+                    dist = 0.0;
                     break;
             }
 

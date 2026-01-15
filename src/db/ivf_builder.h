@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <sstream>
 
 namespace sketch {
 
@@ -64,5 +65,37 @@ private:
     const uint8_t* get_centroids(SetType setType) const;
     Ret internal_recalc_centroids();
 };
+
+template <typename T>
+void print_records(DatasetType type, size_t dim, size_t count, const T& source, std::stringstream& stream) {
+    for (size_t i = 0; i < source.records_count() && i < count; i++) {
+        switch (type) {
+            case DatasetType::f32: {
+                const float* f = reinterpret_cast<const float*>(source.get_record(i));
+                for (size_t d = 0; d < dim && d < count; d++) {
+                    stream << f[d] << ", ";
+                }
+                stream << "\n";
+                break;
+            }
+            case DatasetType::f16: {
+                const float16_t* f = reinterpret_cast<const float16_t*>(source.get_record(i));
+                for (size_t d = 0; d < dim && d < count; d++) {
+                    stream << f[d] << ", ";
+                }
+                stream << "\n";
+                break;
+            }
+            case DatasetType::u8: {
+                const uint8_t* f = reinterpret_cast<const uint8_t*>(source.get_record(i));
+                for (size_t d = 0; d < dim && d < count; d++) {
+                    stream << static_cast<uint32_t>(f[d]) << ", ";
+                }
+                stream << "\n";
+                break;
+            }
+        }
+    }
+}
 
 } // namespace sketch

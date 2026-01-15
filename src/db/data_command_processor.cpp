@@ -12,7 +12,8 @@ namespace sketch {
 
 static CommandNames supported_commands = { "USE", "GENERATE", "LOAD", "DUMP", "FIND", "KNN",
                                            "SAMPLE", "KMEANS++", "MAKE_CENTROIDS", "MAKE_IVF",
-                                           "ANN", "GC", "SHOW_IVF", "MAKE_RESIDUAL", "MAKE_PQ_CENTROIDS" };
+                                           "ANN", "GC", "DUMP_IVF", "MAKE_RESIDUAL", "MAKE_PQ_CENTROIDS",
+                                           "MOCK_IVF" };
 
 DataCommandProcessor::DataCommandProcessor(Engine& engine)
   : engine_(engine) {
@@ -59,8 +60,8 @@ Ret DataCommandProcessor::process_command(Commands& commands, bool is_help) {
             return process_make_centroids_cmd(commands, is_help);
         } else if (cmd_type == "MAKE_IVF") {
             return process_make_ivf_cmd(commands, is_help);
-        } else if (cmd_type == "SHOW_IVF") {
-            return process_show_ivf_cmd(commands, is_help);
+        } else if (cmd_type == "DUMP_IVF") {
+            return process_dump_ivf_cmd(commands, is_help);
         } else if (cmd_type == "ANN") {
             return process_ann_cmd(commands, is_help);
         } else if (cmd_type == "GC") {
@@ -69,6 +70,8 @@ Ret DataCommandProcessor::process_command(Commands& commands, bool is_help) {
             return process_make_residual_cmd(commands, is_help);
         } else if (cmd_type == "MAKE_PQ_CENTROIDS") {
             return process_make_pq_centroids_cmd(commands, is_help);
+        } else if (cmd_type == "MOCK_IVF") {
+            return process_mock_ivf_centroids_cmd(commands, is_help);
         }
     }
 
@@ -154,10 +157,8 @@ Ret DataCommandProcessor::process_load_cmd(Commands& commands, bool is_help) {
     const auto& input_path = commands[1];
 
     LoadReport report;
-    auto ret = current_dataset_->load(input_path, report, engine_.thread_pool());
-    if (ret != 0) {
-        return ret;
-    }
+    auto ret = current_dataset_->load(input_path, report /*, engine_.thread_pool()*/);
+    CHECK(ret)
 
     LOG_DEBUG << "input_count=" << report.input_count.load();
     LOG_DEBUG << "staged_count=" << report.staged_count.load();
@@ -311,25 +312,7 @@ Ret DataCommandProcessor::process_sample_cmd(Commands& commands, bool is_help) {
     }
 
     std::stringstream stream;
-    for (size_t i = 0; i < records_count && i < 16; i++) {
-        const auto& record = builder.get_record(i);
-
-        for (size_t d = 0; d < md.dim && d < 4; d++) {
-            switch (md.type) {
-                case DatasetType::f32: {
-                    const float* f = reinterpret_cast<const float*>(record);
-                    stream << f[d] << ", ";
-                    break;
-                }
-                case DatasetType::f16: {
-                    const float16_t* f = reinterpret_cast<const float16_t*>(record);
-                    stream << f[d] << ", ";
-                    break;
-                }
-            }
-        }
-        stream << "\n";
-    }
+    print_records(md.type, md.dim, 4, builder, stream);
 
     return Ret(0, stream.str(), true);
 }
@@ -359,27 +342,7 @@ Ret DataCommandProcessor::process_kmeanspp_cmd(Commands& commands, bool is_help)
     }
 
     std::stringstream stream;
-    stream << std::endl;
-    for (size_t i = 0; i < centroids_count; i++) {
-        const uint8_t* c = builder.get_centroid(i);
-        switch (md.type) {
-            case DatasetType::f16: {
-                const float16_t* data_ptr = reinterpret_cast<const float16_t*>(c);
-                for (size_t j = 0; j < 3; j++) {
-                    stream << data_ptr[j] << " ";
-                }
-                break;
-            }
-            case DatasetType::f32: {
-                const float* data_ptr = reinterpret_cast<const float*>(c);
-                for (size_t j = 0; j < 3; j++) {
-                    stream << data_ptr[j] << " ";
-                }
-                break;
-            }
-        }
-        stream << std::endl;
-    }
+    print_centroids(md.type, md.dim, 4, builder, stream);
 
     return Ret(0, stream.str(), true);
 }
@@ -392,9 +355,6 @@ Ret DataCommandProcessor::process_make_centroids_cmd(Commands& commands, bool is
     if (commands.size() < 4) {
         return "MAKE_CENTROIDS command requires additional parameters";
     }
-
-    std::stringstream stream;
-    stream << std::endl;
 
     PARAM(1, centroids_count);
     PARAM(2, sample_size);
@@ -424,26 +384,8 @@ Ret DataCommandProcessor::process_make_centroids_cmd(Commands& commands, bool is
         }
     }
 
-    for (size_t i = 0; i < centroids_count; i++) {
-        const uint8_t* c = builder.get_centroid(i);
-        switch (md.type) {
-            case DatasetType::f16: {
-                const float16_t* data_ptr = reinterpret_cast<const float16_t*>(c);
-                for (size_t j = 0; j < 3; j++) {
-                    stream << data_ptr[j] << ", ";
-                }
-                break;
-            }
-            case DatasetType::f32: {
-                const float* data_ptr = reinterpret_cast<const float*>(c);
-                for (size_t j = 0; j < 3; j++) {
-                    stream << data_ptr[j] << ", ";
-                }
-                break;
-            }
-        }
-        stream << std::endl;
-    }
+    std::stringstream stream;
+    print_centroids(md.type, md.dim, centroids_count, builder, stream);
 
     return Ret(0, stream.str(), true);
 }
@@ -488,16 +430,16 @@ Ret DataCommandProcessor::process_make_ivf_cmd(Commands& commands, bool is_help)
     return current_dataset_->write_index(builder, engine_.thread_pool());
 }
 
-Ret DataCommandProcessor::process_show_ivf_cmd(Commands& commands, bool is_help) {
+Ret DataCommandProcessor::process_dump_ivf_cmd(Commands& commands, bool is_help) {
     if (is_help) {
-        return Ret(0, "SHOW_IVF command help: SHOW_IVF");
+        return Ret(0, "DUMP_IVF command help: DUMP_IVF");
     }
 
     if (commands.size() != 1) {
-        return "SHOW_IVF command does not require additional parameters";
+        return "DUMP_IVF command does not require additional parameters";
     }
 
-    return current_dataset_->show_ivf();
+    return current_dataset_->dump_ivf();
 }
 
 
@@ -559,7 +501,7 @@ Ret DataCommandProcessor::process_make_residual_cmd(Commands& commands, bool is_
 
     PARAM(1, count);
 
-    return current_dataset_->make_residual(count, engine_.thread_pool());
+    return current_dataset_->make_residuals(count, engine_.thread_pool());
 }
 
 Ret DataCommandProcessor::process_make_pq_centroids_cmd(Commands& commands, bool is_help) {
@@ -573,8 +515,23 @@ Ret DataCommandProcessor::process_make_pq_centroids_cmd(Commands& commands, bool
 
     PARAM(1, count);
 
-    return current_dataset_->make_pq_centroids(count, engine_.thread_pool());
+    const uint64_t pq_centroids_count = 256;
+    return current_dataset_->make_pq_centroids(count, pq_centroids_count, engine_.thread_pool());
+}
 
+Ret DataCommandProcessor::process_mock_ivf_centroids_cmd(Commands& commands, bool is_help) {
+    if (is_help) {
+        return Ret(0, "MOCK_IVF command help: MOCK_IVF <centroids_count> <residuals_count>");
+    }
+
+    if (commands.size() < 3) {
+        return "MOCK_IVF command requires additional parameters";
+    }
+
+    PARAM(1, centroids_count);
+    PARAM(2, residuals_count);
+
+    return current_dataset_->mock_ivf(centroids_count, residuals_count);
 }
 
 } // namespace sketch
